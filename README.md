@@ -116,3 +116,8 @@ int main(int argc, char** argv) {
 	return 0;
 }
 ```
+
+## Additional Resources
+- [Updated Banned API Documentation](https://www.microsoft.com/security/blog/2011/06/23/updated-banned-api-documentation-available/#:~:text=The%20most%20common%20examples%20of,%2C%20MD4%20and%20SHA%2D1)
+
+- [Discouraged of forbidden C functions](https://libreswan.org/wiki/Discouraged_or_forbidden_C_functions)
