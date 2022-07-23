@@ -6,7 +6,7 @@
 - Tested on Windows 11 with Python 3.8.10
 
 ## Video Link
-- [Link](TODO)
+- [Link](https://www.youtube.com/watch?v=RQN9wAHBHdY)
 
 ## Installation
 - This was not turned into a python module so there is no installation. Place the script in a directory and run using Python 3.
