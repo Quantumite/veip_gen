@@ -97,7 +97,7 @@ class VanillaEIPBufferOverflowExample():
     def produce_beginning(data=None):
         if data is None:
             content = ""
-            content += "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\n"
+            content += "#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <stdbool.h>\n\n"
             content += "int main(int argc, char** argv) {\n"
             return content
         else:
@@ -133,6 +133,7 @@ class VanillaEIPBufferOverflowExample():
         return stack_vars_string
 
     def create(self):
+        """Creates the vulnerable code."""
         file_contents = VanillaEIPBufferOverflowExample.produce_beginning()
         file_contents += self.produce_stack_variables()
         file_contents += self.produce_buffer()
@@ -153,10 +154,84 @@ class VanillaEIPBufferOverflowExample():
         file_contents += VanillaEIPBufferOverflowExample.produce_ending()
         return file_contents
 
+class ConditionalEIPBufferOverflowExample(VanillaEIPBufferOverflowExample):
+    """Adds conditional code that must be satisfied before the EIP overflow vulnerability is exposed."""
+    def __init__(self, number_stack_variables=3, buffer_name="buf", buffer_size=16, random_vuln=False, 
+                specific_vuln_string=None, verbose=False, condition_type=None, condition="true", 
+                bytes_value=b"ABCD", numargs_value=3):
+        super().__init__(number_stack_variables = number_stack_variables, buffer_name = buffer_name, 
+                        buffer_size = buffer_size, random_vuln=random_vuln, specific_vuln_string=specific_vuln_string,
+                        verbose = verbose)
+        self.condition = condition
+        self.condition_type = condition_type
+        self.bytes_value = bytes_value
+        self.numargs_value = numargs_value
+        self.bytes_value_string = ""
+
+        if self.condition_type is not None:
+            self.create_condition()
+
+        if self.condition_type == "bytes":
+            self.bytes_value_string = f"\tchar bytes_value[{len(self.bytes_value)}] = {{"
+            for b in self.bytes_value:
+                if isinstance(b, bytes):
+                    self.bytes_value_string += f"{b},"
+                elif isinstance(b, str):
+                    self.bytes_value_string += f"{ord(b)},"
+                else:
+                    print("[!] Unknown type for bytes conditional!\n")
+                    quit()
+            self.bytes_value_string = self.bytes_value_string[:-1]
+            self.bytes_value_string += "};"
+
+    def create_conditional(self, vuln):
+        """Creates a conditional wrapper around a vuln."""
+        conditional_code_string = f"if({self.condition}){{\n"
+        conditional_code_string += "\t\t"+str(vuln)+"\n"
+        conditional_code_string += "\t}\n"
+        return conditional_code_string
+
+    def create_condition(self):
+        if self.condition_type == "numargs":
+            self.condition = f"argc == {self.numargs_value}"
+        elif self.condition_type == "bytes":
+            self.condition=f"memcmp(argv[1], bytes_value, {len(self.bytes_value)}) == 0"
+        else:
+            print(f"[!] Using unvalidated condition: {self.condition} in code!\n");
+        
+
+    def create(self):
+        """Creates the vulnerable code."""
+        file_contents = ConditionalEIPBufferOverflowExample.produce_beginning()
+        file_contents += self.produce_stack_variables()
+        file_contents += self.produce_buffer()
+        if self.condition_type == "bytes":
+            file_contents += self.bytes_value_string
+        file_contents += ConditionalEIPBufferOverflowExample.produce_blank_line()
+        if self.random_vuln:
+            idx = random.randint(0,2)
+            vulns = [StrcpyVuln(), StrncpyVuln(), GetsVuln(), SprintfVuln(), StrcatVuln()]
+            vuln = vulns[idx]
+            if self.verbose:
+                print(f"[*] Randomly selected vulnerability: {vuln}\n")
+            file_contents += "\t"+self.create_conditional(str(vuln))
+        elif self.specific_vuln is not None:
+            file_contents += "\t" + self.create_conditional(str(self.specific_vuln))
+        else:
+            if self.verbose:
+                print("[*] Default vulnerability (strcpy) used.\n")
+            file_contents += "\t"+self.create_conditional(str(StrcpyVuln()))
+        file_contents += ConditionalEIPBufferOverflowExample.produce_ending()
+        return file_contents
+
+
 def main():
     arg_parse = argparse.ArgumentParser()
     arg_parse.add_argument("-v", "--verbose", help="Print out additional information about the vulnerable code being generated.", action="store_true")
     arg_parse.add_argument("-s", "--specific", help="Specify a specific vulnerable function to use. Options: strcpy, strncpy, strcat, sprintf, gets.", default="strcpy", type=str)
+    arg_parse.add_argument("-t", "--type", help="Type of vulnerability -- Currently supports 'vanilla' or 'conditional'.\n\nVanilla EIP overflows are always guaranteed to have the vulnerability present. Conditional EIP vulnerabilities have a condition that must be satisifed before the vulnerable code is reached.", default='vanilla')
+    arg_parse.add_argument("--num-args", help="Only relevant to conditional EIP vulnerable code. Specify the number of args that should be given to expose the vulnerable code. Default: 3", type=int, default=None)
+    arg_parse.add_argument("--bytes", help="Only relevant to conditional EIP vulnerable code. Specify the bytes to be searched for at the beginning of the first argument in order to satisfy the condition.", default=None)
     arg_parse.add_argument("-r", "--random", help="Pick a random vulnerable function.", default=False, action="store_true")
     arg_parse.add_argument("-n", "--number-stack-variables", help="How many stack variables would you like in the main() function. This will move the buffer address around on the stack to make vulnerable programs different.", default=3, type=int)
     arg_parse.add_argument("-b", "--buffer-size", help="Set the size of the buffer to be used for overflows.", default=16, type=int)
@@ -165,7 +240,14 @@ def main():
     args = arg_parse.parse_args()
 
     for i in range(args.generate):
-        example = VanillaEIPBufferOverflowExample(number_stack_variables=args.number_stack_variables, buffer_size=args.buffer_size, random_vuln=args.random, specific_vuln_string=args.specific, verbose=True if args.verbose else False)
+        if args.type == 'vanilla' or args.type[0].lower() == 'v':
+            example = VanillaEIPBufferOverflowExample(number_stack_variables=args.number_stack_variables, buffer_size=args.buffer_size, random_vuln=args.random, specific_vuln_string=args.specific, verbose=True if args.verbose else False)
+        elif args.type == 'conditional' or args.type[0].lower() == 'c':
+            if args.num_args is not None:
+                condition_type = 'numargs'
+            elif args.bytes is not None:
+                condition_type = 'bytes'
+            example = ConditionalEIPBufferOverflowExample(number_stack_variables=args.number_stack_variables, buffer_size=args.buffer_size, random_vuln=args.random, specific_vuln_string=args.specific, verbose=True if args.verbose else False, condition_type=condition_type, condition=None, bytes_value=args.bytes, numargs_value = args.num_args)
 
         if args.file is not None:
             if args.generate > 1:
