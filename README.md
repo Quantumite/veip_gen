@@ -7,6 +7,7 @@
 
 ## Video Link
 - [Link](https://www.youtube.com/watch?v=RQN9wAHBHdY)
+- [Link pt. 2](https://youtu.be/dzea-w3Zf9s)
 
 ## Installation
 - This was not turned into a python module so there is no installation. Place the script in a directory and run using Python 3.
